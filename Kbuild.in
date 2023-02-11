@@ -1,0 +1,2 @@
+obj-m := @DRIVER_NAME@.o
+CFLAGS_@DRIVER_NAME@.o := -std=gnu11 -Wno-declaration-after-statement
