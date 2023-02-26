@@ -7,6 +7,7 @@
 #include <linux/slab.h>    // Needed for kmalloc/kfree
 #include <linux/uaccess.h> // Needed for copy to/from user
 #include <linux/usb.h>     // Needed by USB driver
+#include <linux/types.h>   // Needed for integer types
 
 /// The license type -- this affects runtime behavior
 MODULE_LICENSE("Dual MIT/GPL");
@@ -236,11 +237,10 @@ tunnel_usb_read(struct file* file, char* buffer, size_t count, loff_t* ppos) {
   // check if disconnect was called
   if (dev->disconnected) return UNLOCK_MUTEX(-ENODEV);
 
-  bool ongoing_io;
   // if IO is under way, we must not touch things
   while (1) {
     spin_lock_irq(&dev->err_lock);
-    ongoing_io = dev->ongoing_read;
+    bool ongoing_io = dev->ongoing_read;
     spin_unlock_irq(&dev->err_lock);
 
     if (ongoing_io) {
@@ -264,29 +264,22 @@ tunnel_usb_read(struct file* file, char* buffer, size_t count, loff_t* ppos) {
     }
 
     // if the buffer is filled we may satisfy the read else we need to start IO
-    if (dev->bulk_in_filled) {
+    size_t available = dev->bulk_in_filled - dev->bulk_in_copied;
+    if (dev->bulk_in_filled && available) {
       // we had read data
-      size_t available = dev->bulk_in_filled - dev->bulk_in_copied;
       size_t chunk     = min(available, count);
 
-      if (!available) {
-        // all data has been used, actual IO needs to be done
-        rv = tunnel_usb_do_read_io(dev, count);
-        if (rv < 0) return UNLOCK_MUTEX(rv);
-        continue;
-      }
-
       // data is available, chunk tells us how much shall be copied
-      if (copy_to_user(
-              buffer, dev->bulk_in_buffer + dev->bulk_in_copied, chunk
-          ))
-        rv = -EFAULT;
-      else rv = chunk;
+      rv =
+          copy_to_user(buffer, dev->bulk_in_buffer + dev->bulk_in_copied, chunk)
+              ? -EFAULT
+              : (int)chunk;
 
       dev->bulk_in_copied += chunk;
 
       // if we are asked for more than we have, we start IO but don't wait
       if (available < count) tunnel_usb_do_read_io(dev, count - chunk);
+
       return UNLOCK_MUTEX(rv);
     }
 
