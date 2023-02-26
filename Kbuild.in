@@ -1,2 +1,3 @@
-obj-m := @DRIVER_NAME@.o
-CFLAGS_@DRIVER_NAME@.o := -std=gnu11 -Wno-declaration-after-statement
+obj-m += @DRIVER_NAME@.o
+@DRIVER_NAME@-objs += @MODULE_SRCS_STR@
+ccflags-y += -std=gnu11 -Wno-declaration-after-statement

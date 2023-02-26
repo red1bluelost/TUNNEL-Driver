@@ -36,12 +36,25 @@ endif ()
 include_directories(SYSTEM ${KERNEL_DIR}/include ${KERNEL_DIR}/arch/x86/include
                     ${KERNEL_DIR}/arch/x86/include/generated)
 
-set(DRIVER_NAME tunnel_network)
-set(DRIVER_MAIN ${DRIVER_NAME}.c)
+add_library(tunnel_network_lib STATIC tunnel_usb.c tunnel_usb.h)
+get_target_property(MODULE_SRCS tunnel_network_lib SOURCES)
+
+set(DRIVER_NAME tunnel)
+set(DRIVER_MAIN tunnel_network.c)
 set(DRIVER_KOBJ ${DRIVER_NAME}.ko)
 
+list(APPEND MODULE_SRCS ${DRIVER_MAIN})
+
+set(MODULE_SRCS_STR ${MODULE_SRCS})
+list(FILTER MODULE_SRCS_STR INCLUDE REGEX ".c")
+string(REPLACE ";" " " MODULE_SRCS_STR "${MODULE_SRCS_STR}")
+string(REPLACE ".c" ".o" MODULE_SRCS_STR "${MODULE_SRCS_STR}")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Kbuild.in
                ${CMAKE_CURRENT_SOURCE_DIR}/Kbuild @ONLY)
+
+foreach(src ${MODULE_SRCS})
+  configure_file(${src} ${src} COPYONLY)
+endforeach()
 
 set(KBUILD_CMD ${CMAKE_MAKE_PROGRAM} -C ${KERNEL_DIR} modules
                M=${CMAKE_CURRENT_BINARY_DIR} src=${CMAKE_CURRENT_SOURCE_DIR})
@@ -49,10 +62,10 @@ add_custom_command(
   OUTPUT ${DRIVER_KOBJ}
   COMMAND ${KBUILD_CMD}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${DRIVER_MAIN}
+  DEPENDS ${MODULE_SRCS}
   VERBATIM)
 
 add_custom_target(${DRIVER_NAME} ALL DEPENDS ${DRIVER_KOBJ})
-add_custom_target(${DRIVER_NAME}-clean COMMAND ${module_cmd} clean)
+add_custom_target(${DRIVER_NAME}-clean COMMAND ${CMAKE_MAKE_PROGRAM} clean)
 
-add_library(dummy_target ${DRIVER_MAIN})
+add_library(dummy_target ${MODULE_SRCS} ${DRIVER_MAIN})
